@@ -7,6 +7,7 @@ import torch.utils.data
 import numpy as np
 import pandas as pd
 import torch.optim.lr_scheduler
+import yarin_dropout_rev
 #from matplotlib import pyplot as plt
 torch.cuda.is_available()
 
@@ -17,8 +18,8 @@ data_later = pd.read_pickle("/home/work/work/Bayesian_yarin/data/data_later.pkl"
 data_early=torch.from_numpy(data_early.values)
 data_later=torch.from_numpy(data_later.values)
 
-train_loader = torch.utils.data.DataLoader(dataset=data_early, batch_size=1, shuffle=True,num_workers=4)
-test_loader = torch.utils.data.DataLoader(dataset=data_later, batch_size=1, shuffle=False,num_workers=4)
+#train_loader = torch.utils.data.DataLoader(dataset=data_early, batch_size=1, shuffle=True,num_workers=4)
+#test_loader = torch.utils.data.DataLoader(dataset=data_later, batch_size=1, shuffle=False,num_workers=4)
 
 #%%
 class BAReg (nn.Module):
@@ -27,10 +28,10 @@ class BAReg (nn.Module):
             self.input_dim = input_dim
             self.output_dim = output_dim
             self.hidden_dim = hidden_dim
-            self.fc1 = nn.Linear(input_dim, hidden_dim,bias=False)
-            self.fc2 = nn.Linear(hidden_dim,hidden_dim,bias=False)
-            self.fc3 = nn.Linear(hidden_dim,hidden_dim,bias=False)
-            self.fc4 = nn.Linear(hidden_dim,output_dim,bias=False)
+            self.fc1 = nn.Linear(input_dim, hidden_dim,bias=True)
+            self.fc2 = nn.Linear(hidden_dim,hidden_dim,bias=True)
+            self.fc3 = nn.Linear(hidden_dim,hidden_dim,bias=True)
+            self.fc4 = nn.Linear(hidden_dim,output_dim,bias=True)
             self.dropout1 = nn.Dropout(0.1)
             self.dropout2 = nn.Dropout(0.1)
             self.dropout3 = nn.Dropout(0.1)
@@ -54,7 +55,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 net = BAReg(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
 
 criterion = nn.MSELoss()
-optimizer = optim.SGD(net.parameters(),lr = 0.0001, momentum =0.9, weight_decay=1e-6)
+optimizer = optim.SGD(net.parameters(),lr = 0.01, momentum =0.9, weight_decay=1e-6)
 
 gamma = 0.00001
 p = 0.25
@@ -67,12 +68,18 @@ nn.init.uniform_(net.fc2.weight,-np.sqrt(3.0/hidden_dim),np.sqrt(3.0/hidden_dim)
 nn.init.uniform_(net.fc3.weight,-np.sqrt(3.0/hidden_dim),np.sqrt(3.0/hidden_dim))
 nn.init.uniform_(net.fc4.weight,-np.sqrt(3.0/hidden_dim),np.sqrt(3.0/hidden_dim))
 
+nn.init.constant_(net.fc1.bias, 0.0)
+nn.init.constant_(net.fc2.bias, 0.0)
+nn.init.constant_(net.fc3.bias, 0.0)
+nn.init.constant_(net.fc4.bias, 0.0)
 
-num_epochs = 41
+
+num_epochs = 1000000
 result_epochs = 10000
 
 path = '/home/work/work/Bayesian_yarin/result/loss2.txt'
 log_path = 'home/work/work/Bayesian_yarin/result/log.txt'
+model_path='home/work/work/Bayesian_yarin/model/log.txt'
 #%%
 for epoch in range(num_epochs):
     
@@ -81,38 +88,45 @@ for epoch in range(num_epochs):
     #train===================
     net.train()
     
-    for i, data in enumerate(train_loader):
+    x = data_early[:,0].to(device).float()
+    y = data_early[:,1].to(device).float()
+    optimizer.zero_grad()
         
-        x = data[:,0].to(device).float()
-        y = data[:,1].to(device).float()
-        optimizer.zero_grad()
+    x = x.unsqueeze(1)
+    y_pred = net(x).squeeze()
+    loss = criterion(y_pred,y)
+    train_loss += loss.item()
+    loss.backward()
+    optimizer.step()
         
-       
-        y_pred = net(x)
-        loss = criterion(y_pred,y)
-        train_loss += loss.item()
-        loss.backward()
-        optimizer.step()
-        
-        with open (log_path, mode='a') as f:
-            f.write("{}\n".format(net(x).cpu().detach().numpy()))
-            f.write("y_pred:{}, y:{}\n".format(y_pred.cpu(), y.cpu()))
-            f.write("loss {}\n".format(loss.item()))
-            f.write("i:{}  train_loss:{}\n".format(i,train_loss))
-            f.write("-------------\n")
+        # with open (log_path, mode='a') as f:
+        #     f.write("{}\n".format(net(x).cpu().detach().numpy()))
+        #     f.write("y_pred:{}, y:{}\n".format(y_pred.cpu(), y.cpu()))
+        #     f.write("loss {}\n".format(loss.item()))
+        #     f.write("i:{}  train_loss:{}\n".format(i,train_loss))
+        #     f.write("-------------\n")
         
     
     scheduler.step()
 
-    if (epoch %20 ==0):
-        avg_train_loss = train_loss/len(train_loader.dataset)
+    if (epoch %10000 ==0):
+        #avg_train_loss = train_loss/len(train_loader.dataset)
         with open(path, mode='a') as f:
             if (epoch ==0):
                 f.write('epoch,train_loss')
                 
             f.write('\n{},{}'.format(epoch,train_loss))
-        params = net.state_dict()
-        file = "model_epoch_{}.prm".format(epoch)
-        torch.save(params,file,pickle_protocol=4)   
+        #params = net.state_dict()
+        #file = "model_epoch_{}.prm".format(epoch)
+        #torch.save(params,file,pickle_protocol=4)   
 
-    
+    if (epoch % 10000==0):
+        print("epoch:{},loss:{}".format(epoch,loss))
+
+
+file = "model_early.prf"
+torch.save(net.state_dict(),file, pickle_protocol=4 )
+#%%
+
+
+#%%
