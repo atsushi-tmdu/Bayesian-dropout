@@ -6,7 +6,8 @@ import torch.nn.functional as F
 import torch.utils.data
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
+import torch.optim.lr_scheduler
+#from matplotlib import pyplot as plt
 torch.cuda.is_available()
 
 #%%
@@ -53,18 +54,25 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 net = BAReg(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
 
 criterion = nn.MSELoss()
-optimizer = optim.SGD(net.parameters(),lr = 0.00001, momentum =0.9, weight_decay=1e-6)
+optimizer = optim.SGD(net.parameters(),lr = 0.001, momentum =0.9, weight_decay=1e-6)
 
-nn.init.kaiming_normal_(net.fc1.weight)
-nn.init.kaiming_normal_(net.fc2.weight)
-nn.init.kaiming_normal_(net.fc3.weight)
-nn.init.kaiming_normal_(net.fc4.weight)
+gamma = 0.00001
+p = 0.25
+
+scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda epoch: (1+gamma*epoch)**-p)
 
 
-num_epochs = 10000
+nn.init.uniform_(net.fc1.weight,-np.sqrt(3.0/input_dim),np.sqrt(3.0/input_dim))
+nn.init.uniform_(net.fc2.weight,-np.sqrt(3.0/hidden_dim),np.sqrt(3.0/hidden_dim))
+nn.init.uniform_(net.fc3.weight,-np.sqrt(3.0/hidden_dim),np.sqrt(3.0/hidden_dim))
+nn.init.uniform_(net.fc4.weight,-np.sqrt(3.0/hidden_dim),np.sqrt(3.0/hidden_dim))
+
+
+num_epochs = 100000
 result_epochs = 1000
 
 path = '/home/work/work/Bayesian_yarin/result/loss2.txt'
+log_path = 'home/work/work/Bayesian_yarin/result/log.txt'
 #%%
 for epoch in range(num_epochs):
     
@@ -86,13 +94,17 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
         
-        #print(net(x))
-        #print(("y_pred:{}, y:{}".format(y_pred.cpu(), y.cpu())))
-        #print("loss {}".format(loss.item()))
-        #print("i:{}  train_loss:{}".format(i,train_loss))
-        #print("-------------")
+        # with open (log_path, mode='a') as f:
+        #     f.write("{}\n".format(net(x).cpu().detach().numpy()))
+        #     f.write("y_pred:{}, y:{}\n".format(y_pred.cpu(), y.cpu()))
+        #     f.write("loss {}\n".format(loss.item()))
+        #     f.write("i:{}  train_loss:{}\n".format(i,train_loss))
+        #     f.write("-------------\n")
         
-    if (epoch %400 ==0):
+    
+    scheduler.step()
+
+    if (epoch %20 ==0):
         avg_train_loss = train_loss/len(train_loader.dataset)
         with open(path, mode='a') as f:
             if (epoch ==0):
@@ -103,5 +115,22 @@ for epoch in range(num_epochs):
         file = "model_epoch_{}.prm".format(epoch)
         torch.save(params,file,pickle_protocol=4)   
 
+    
+
 
 #%%
+
+# x2=net.fc1(x).cpu().detach().numpy().squeeze()
+# import matplotlib.pyplot as plt
+# plt.hist(x2)
+# plt.hist(net.fc1.weight.cpu().detach().numpy().squeeze())
+# F.relu(net.fc1(x))
+# net.fc1.weight
+# nn.init.normal_(net.fc1.weight,-np.sqrt(3.0/input_dim),np.sqrt(3.0/input_dim))
+# net.fc1(x)
+# F.relu(net.fc1(x))
+# net.fc2.weight
+# x = data[:,0].to(device).float()
+# F.relu(net.fc1(x))
+# net.fc2(F.relu(net.fc1(x)))
+# F.relu(net.fc2(F.relu(net.fc1(x))))
