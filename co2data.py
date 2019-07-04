@@ -5,7 +5,6 @@ import plotly.offline as py
 import plotly.graph_objs as go
 import datetime as dt
 import numpy as np
-import matplotlib.pyplot as plt
 
 py.init_notebook_mode(connected=True)
 
@@ -63,8 +62,8 @@ data_later = data_monthly[data_monthly['index'] >= 0.5]
 
 
 
-data_early.to_pickle('data_early.pkl')
-data_later.to_pickle('data_later.pkl')
+data_early.to_pickle('/home/work/work/Bayesian_yarin/data/data_early.pkl')
+data_later.to_pickle('/home/work/work/Bayesian_yarin/data/data_later.pkl')
 
 
 
